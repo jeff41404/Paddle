@@ -13,9 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License. */
 
 #pragma once
+#include <iostream>
 #include <string>
 #include <typeindex>
-#include <iostream>
 
 #include "paddle/fluid/framework/framework.pb.h"
 #include "paddle/fluid/platform/bfloat16.h"
@@ -37,6 +37,12 @@ struct complex;
 
 namespace paddle {
 namespace framework {
+
+template <typename T>
+struct IsComplex : public std::false_type {};
+
+template <typename T>
+struct IsComplex<platform::complex<T>> : public std::true_type {};
 
 template <typename T>
 struct DataTypeTrait {};

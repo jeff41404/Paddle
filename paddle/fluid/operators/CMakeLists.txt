@@ -98,29 +98,30 @@ else()
     op_library(warpctc_op DEPS dynload_warpctc sequence_padding sequence_scale)
 endif()
 
-op_library(spectral_op SRCS spectral_op.cc spectral_op.cu DEPS ${OP_HEADER_DEPS})
-if (WITH_GPU)
-    find_library(CUFFT_LIB libcufft.so
-        PATHS
-        ${CUDA_TOOLKIT_ROOT_DIR}/lib64/
-        NO_DEFAULT_PATH
-    )
-    target_link_libraries(spectral_op ${CUFFT_LIB})
-endif()
-if(WITH_ONEMKL)
-    find_library(ONEMKL_CORE libmkl_core.so
-        PATHS
-        ${MKL_ROOT}/lib/${MKL_ARCH}
-        NO_DEFAULT_PATH
-    )
-    find_library(ONEMKL_THREAD libmkl_intel_thread.so
-        PATHS
-        ${MKL_ROOT}/lib/${MKL_ARCH}
-        NO_DEFAULT_PATH
-    )
-    target_include_directories(spectral_op PRIVATE ${MKL_INCLUDE})
-    target_link_libraries(spectral_op MKL::mkl_core MKL::mkl_intel_thread)
-endif()
+op_library(spectral_op SRCS spectral_op.cc spectral_op.cu DEPS dynload_cuda ${OP_HEADER_DEPS})
+# op_library(spectral_op SRCS spectral_op.cc spectral_op.cu DEPS ${OP_HEADER_DEPS})
+# if (WITH_GPU)
+#     find_library(CUFFT_LIB libcufft.so
+#         PATHS
+#         ${CUDA_TOOLKIT_ROOT_DIR}/lib64/
+#         NO_DEFAULT_PATH
+#     )
+#     target_link_libraries(spectral_op ${CUFFT_LIB})
+# endif()
+# if(WITH_ONEMKL)
+#     find_library(ONEMKL_CORE libmkl_core.so
+#         PATHS
+#         ${MKL_ROOT}/lib/${MKL_ARCH}
+#         NO_DEFAULT_PATH
+#     )
+#     find_library(ONEMKL_THREAD libmkl_intel_thread.so
+#         PATHS
+#         ${MKL_ROOT}/lib/${MKL_ARCH}
+#         NO_DEFAULT_PATH
+#     )
+#     target_include_directories(spectral_op PRIVATE ${MKL_INCLUDE})
+#     target_link_libraries(spectral_op MKL::mkl_core MKL::mkl_intel_thread)
+# endif()
 
 op_library(lstm_op DEPS ${OP_HEADER_DEPS}  lstm_compute)
 op_library(eye_op DEPS ${OP_HEADER_DEPS})
@@ -185,6 +186,7 @@ cc_test(save_load_combine_op_test SRCS save_load_combine_op_test.cc DEPS save_co
 if (WITH_GPU)
     nv_test(dropout_op_test SRCS dropout_op_test.cc DEPS dropout_op tensor generator)
     nv_test(test_leaky_relu_grad_grad_functor SRCS test_leaky_relu_grad_grad_functor.cc test_leaky_relu_grad_grad_functor.cu DEPS tensor device_context eigen3)
+    nv_test(feed_forward_test SRCS feed_forward_test.cu DEPS elementwise_add_op matmul_op tensor generator)
 elseif(WITH_ROCM)
     hip_test(dropout_op_test SRCS dropout_op_test.cc DEPS dropout_op tensor generator)
     hip_test(test_leaky_relu_grad_grad_functor SRCS test_leaky_relu_grad_grad_functor.cc test_leaky_relu_grad_grad_functor.cu DEPS tensor device_context eigen3)

@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "paddle/fluid/framework/data_type.h"
 #include "paddle/fluid/framework/eigen.h"
 #include "paddle/fluid/operators/transpose_op.h"
 #include "paddle/fluid/platform/complex.h"
@@ -61,13 +62,8 @@ class FFTC2COp : public framework::OperatorWithKernel {
   using framework::OperatorWithKernel::OperatorWithKernel;
 
   void InferShape(framework::InferShapeContext* ctx) const override {
-    PADDLE_ENFORCE_EQ(ctx->HasInput("X"), true,
-                      platform::errors::InvalidArgument(
-                          "Input(%s) of FFTC2COp should not be null.", "X"));
-    PADDLE_ENFORCE_EQ(ctx->HasOutput("Out"), true,
-                      platform::errors::InvalidArgument(
-                          "Output(%s) of FFTC2COp should not be null.", "Out"));
-
+    OP_INOUT_CHECK(ctx->HasInput("X"), "Input", "X", "fft_c2c");
+    OP_INOUT_CHECK(ctx->HasOutput("Out"), "Output", "Out", "fft_c2c");
     ctx->ShareDim("X", /*->*/ "Out");  // only for c2c
   }
 
@@ -99,17 +95,14 @@ class FFTC2CGradOp : public framework::OperatorWithKernel {
   using framework::OperatorWithKernel::OperatorWithKernel;
 
   void InferShape(framework::InferShapeContext* ctx) const override {
-    PADDLE_ENFORCE_EQ(
-        ctx->HasInput(framework::GradVarName("Out")), true,
-        platform::errors::InvalidArgument(
-            "Input(%s) of FFTC2CGradOp should not be null.", "DOut"));
-    PADDLE_ENFORCE_EQ(
-        ctx->HasOutput(framework::GradVarName("X")), true,
-        platform::errors::InvalidArgument(
-            "Output(%s) of FFTC2CGradOp should not be null.", "DX"));
-    auto x_grad_name = framework::GradVarName("X");
-    ctx->SetOutputDim(x_grad_name,
-                      ctx->GetInputDim(framework::GradVarName("Out")));
+    const auto out_grad_name = framework::GradVarName("Out");
+    OP_INOUT_CHECK(ctx->HasInput(out_grad_name), "Input", out_grad_name,
+                   "fft_c2c_grad");
+    const auto x_grad_name = framework::GradVarName("X");
+    OP_INOUT_CHECK(ctx->HasOutput(x_grad_name), "Output", x_grad_name,
+                   "fft_c2c_grad");
+
+    ctx->SetOutputDim(x_grad_name, ctx->GetInputDim(out_grad_name));
   }
 
  protected:
@@ -145,16 +138,13 @@ class FFTR2COp : public framework::OperatorWithKernel {
   using framework::OperatorWithKernel::OperatorWithKernel;
 
   void InferShape(framework::InferShapeContext* ctx) const override {
-    PADDLE_ENFORCE_EQ(ctx->HasInput("X"), true,
-                      platform::errors::InvalidArgument(
-                          "Input(%s) of FFTR2COp should not be null.", "X"));
-    PADDLE_ENFORCE_EQ(ctx->HasOutput("Out"), true,
-                      platform::errors::InvalidArgument(
-                          "Output(%s) of FFTR2COp should not be null.", "Out"));
+    OP_INOUT_CHECK(ctx->HasInput("X"), "Input", "X", "fft_r2c");
+    OP_INOUT_CHECK(ctx->HasOutput("Out"), "Output", "Out", "fft_r2c");
+
     const auto axes = ctx->Attrs().Get<std::vector<int64_t>>("axes");
     const bool onesided = ctx->Attrs().Get<bool>("onesided");
     if (!onesided) {
-      ctx->ShareDim("X", /*->*/ "Out");  //
+      ctx->ShareDim("X", /*->*/ "Out");
     } else {
       framework::DDim out_dim(ctx->GetInputDim("X"));
       const int64_t last_fft_axis = axes.back();
@@ -192,16 +182,16 @@ class FFTR2CGradOp : public framework::OperatorWithKernel {
   using framework::OperatorWithKernel::OperatorWithKernel;
 
   void InferShape(framework::InferShapeContext* ctx) const override {
-    PADDLE_ENFORCE_EQ(
-        ctx->HasInput(framework::GradVarName("Out")), true,
-        platform::errors::InvalidArgument(
-            "Input(%s) of FFTR2CGradOp should not be null.", "DOut"));
-    PADDLE_ENFORCE_EQ(
-        ctx->HasOutput(framework::GradVarName("X")), true,
-        platform::errors::InvalidArgument(
-            "Output(%s) of FFTR2CGradOp should not be null.", "DX"));
-    auto x_grad_name = framework::GradVarName("X");
-    ctx->ShareDim("X", /*->*/ x_grad_name);  //
+    const auto out_grad_name = framework::GradVarName("Out");
+    OP_INOUT_CHECK(ctx->HasInput(out_grad_name), "Input", out_grad_name,
+                   "fft_r2c_grad");
+    OP_INOUT_CHECK(ctx->HasInput("X"), "Input", "X", "fft_r2c_grad");
+
+    const auto x_grad_name = framework::GradVarName("X");
+    OP_INOUT_CHECK(ctx->HasOutput(x_grad_name), "Output", x_grad_name,
+                   "fft_r2c_grad");
+
+    ctx->ShareDim("X", /*->*/ x_grad_name);
   }
 
  protected:
@@ -246,22 +236,32 @@ class FFTC2ROp : public framework::OperatorWithKernel {
   using framework::OperatorWithKernel::OperatorWithKernel;
 
   void InferShape(framework::InferShapeContext* ctx) const override {
-    PADDLE_ENFORCE_EQ(ctx->HasInput("X"), true,
-                      platform::errors::InvalidArgument(
-                          "Input(%s) of FFTC2ROp should not be null.", "X"));
-    PADDLE_ENFORCE_EQ(ctx->HasOutput("Out"), true,
-                      platform::errors::InvalidArgument(
-                          "Output(%s) of FFTC2ROp should not be null.", "Out"));
+    OP_INOUT_CHECK(ctx->HasInput("X"), "Input", "X", "fft_c2r");
+    OP_INOUT_CHECK(ctx->HasOutput("Out"), "Output", "Out", "fft_c2r");
+
     const auto axes = ctx->Attrs().Get<std::vector<int64_t>>("axes");
+    const auto x_dim = ctx->GetInputDim("X");
+    for (size_t i = 0; i < axes.size() - 1L; i++) {
+      PADDLE_ENFORCE_GT(x_dim[axes[i]], 0,
+                        platform::errors::InvalidArgument(
+                            "Invalid fft n-point (%d).", x_dim[axes[i]]));
+    }
 
     const int64_t last_dim_size = ctx->Attrs().Get<int64_t>("last_dim_size");
     framework::DDim out_dim(ctx->GetInputDim("X"));
     const int64_t last_fft_axis = axes.back();
     if (last_dim_size == 0) {
       const int64_t last_fft_dim_size = out_dim.at(last_fft_axis);
-      out_dim.at(last_fft_axis) = (last_fft_dim_size - 1) * 2;
+      const int64_t fft_n_point = (last_fft_dim_size - 1) * 2;
+      PADDLE_ENFORCE_GT(fft_n_point, 0,
+                        platform::errors::InvalidArgument(
+                            "Invalid fft n-point (%d).", fft_n_point));
+      out_dim.at(last_fft_axis) = fft_n_point;
     } else {
-      out_dim.at(last_fft_axis) = ctx->Attrs().Get<int64_t>("last_dim_size");
+      PADDLE_ENFORCE_GT(last_dim_size, 0,
+                        platform::errors::InvalidArgument(
+                            "Invalid fft n-point (%d).", last_dim_size));
+      out_dim.at(last_fft_axis) = last_dim_size;
     }
     ctx->SetOutputDim("Out", out_dim);
   }
@@ -294,16 +294,14 @@ class FFTC2RGradOp : public framework::OperatorWithKernel {
   using framework::OperatorWithKernel::OperatorWithKernel;
 
   void InferShape(framework::InferShapeContext* ctx) const override {
-    PADDLE_ENFORCE_EQ(
-        ctx->HasInput(framework::GradVarName("Out")), true,
-        platform::errors::InvalidArgument(
-            "Input(%s) of FFTC2RGradOp should not be null.", "DOut"));
-    PADDLE_ENFORCE_EQ(
-        ctx->HasOutput(framework::GradVarName("X")), true,
-        platform::errors::InvalidArgument(
-            "Output(%s) of FFTC2RGradOp should not be null.", "DX"));
-    auto x_grad_name = framework::GradVarName("X");
-    auto out_grad_name = framework::GradVarName("Out");
+    const auto out_grad_name = framework::GradVarName("Out");
+    OP_INOUT_CHECK(ctx->HasInput(out_grad_name), "Input", out_grad_name,
+                   "fft_c2r_grad");
+
+    const auto x_grad_name = framework::GradVarName("X");
+    OP_INOUT_CHECK(ctx->HasOutput(x_grad_name), "Output", x_grad_name,
+                   "fft_c2r_grad");
+
     const auto axes = ctx->Attrs().Get<std::vector<int64_t>>("axes");
 
     const auto out_grad_dim = ctx->GetInputDim(out_grad_name);
@@ -356,7 +354,7 @@ static inline void MKL_DFTI_CHECK(MKL_INT status) {
 struct DftiDescriptorDeleter {
   void operator()(DFTI_DESCRIPTOR_HANDLE handle) {
     if (handle != nullptr) {
-      MKL_DFTI_CHECK(platform::errors::External(DftiFreeDescriptor(&handle)));
+      MKL_DFTI_CHECK(DftiFreeDescriptor(&handle));
     }
   }
 };
@@ -409,20 +407,25 @@ DftiDescriptor _plan_mkl_fft(const framework::proto::VarType::Type& in_dtype,
       case framework::proto::VarType::COMPLEX128:
         return DFTI_DOUBLE;
       default:
-        PADDLE_THROW(platform::errors::InvalidArgument(
+        PADDLE_THROW(platform::errors::InvalidArgument(
             "Input data type should be FP32, FP64, COMPLEX64 or COMPLEX128."));
     }
   }();
 
-  const bool complex_input = framework::IsComplexType(in_dtype);
-  const bool complex_output = framework::IsComplexType(out_dtype);
-  const DFTI_CONFIG_VALUE domain = [&] {
-    if (forward) {
-      return complex_input ? DFTI_COMPLEX : DFTI_REAL;
-    } else {
-      return complex_output ? DFTI_COMPLEX : DFTI_REAL;
-    }
-  }();
+  // C2C, R2C, C2R
+  const FFTTransformType fft_type = GetFFTTransformType(in_dtype, out_dtype);
+  const DFTI_CONFIG_VALUE domain =
+      (fft_type == FFTTransformType::C2C) ? DFTI_COMPLEX : DFTI_REAL;
+
+  // const bool complex_input = framework::IsComplexType(in_dtype);
+  // const bool complex_output = framework::IsComplexType(out_dtype);
+  // const DFTI_CONFIG_VALUE domain = [&] {
+  //   if (forward) {
+  //     return complex_input ? DFTI_COMPLEX : DFTI_REAL;
+  //   } else {
+  //     return complex_output ? DFTI_COMPLEX : DFTI_REAL;
+  //   }
+  // }();
 
   DftiDescriptor descriptor;
   std::vector<MKL_LONG> fft_sizes(signal_sizes.cbegin(), signal_sizes.cend());
@@ -457,7 +460,7 @@ DftiDescriptor _plan_mkl_fft(const framework::proto::VarType::Type& in_dtype,
                               mkl_out_stride.data()));
 
   // conjugate even storage
-  if (!complex_input || !complex_output) {
+  if (!(fft_type == FFTTransformType::C2C)) {
     MKL_DFTI_CHECK(DftiSetValue(descriptor.get(), DFTI_CONJUGATE_EVEN_STORAGE,
                                 DFTI_COMPLEX_COMPLEX));
   }
@@ -470,8 +473,16 @@ DftiDescriptor _plan_mkl_fft(const framework::proto::VarType::Type& in_dtype,
         ((normalization == FFTNormMode::by_sqrt_n)
              ? 1.0 / std::sqrt(static_cast<double>(signal_numel))
              : 1.0 / static_cast<double>(signal_numel));
-    const auto scale_direction =
-        forward ? DFTI_FORWARD_SCALE : DFTI_BACKWARD_SCALE;
+    const auto scale_direction = [&]() {
+      if (fft_type == FFTTransformType::R2C ||
+          (fft_type == FFTTransformType::C2C && forward)) {
+        return DFTI_FORWARD_SCALE;
+      } else {
+        // (fft_type == FFTTransformType::C2R ||
+        //          (fft_type == FFTTransformType::C2C && !forward))
+        return DFTI_BACKWARD_SCALE;
+      }
+    }();
     MKL_DFTI_CHECK(DftiSetValue(descriptor.get(), scale_direction, scale));
   }
 
@@ -556,13 +567,43 @@ void exec_fft(const DeviceContext& ctx, const Tensor* x, Tensor* out,
   DftiDescriptor desc =
       _plan_mkl_fft(x->type(), out->type(), input_stride, output_stride,
                     signal_sizes, normalization, forward);
-  // dump_descriptor(desc.get());
-  if (forward) {
-    MKL_DFTI_CHECK(DftiComputeForward(desc.get(), collapsed_input.data<void>(),
-                                      collapsed_output.data<void>()));
-  } else {
-    MKL_DFTI_CHECK(DftiComputeBackward(desc.get(), collapsed_input.data<void>(),
+
+  const FFTTransformType fft_type = GetFFTTransformType(x->type(), out->type());
+  if (fft_type == FFTTransformType::C2R && forward) {
+    framework::Tensor collapsed_input_conj(collapsed_input.type());
+    collapsed_input_conj.mutable_data<Ti>(collapsed_input.dims(),
+                                          ctx.GetPlace());
+    // conjugate the input
+    platform::ForRange<DeviceContext> for_range(ctx, collapsed_input.numel());
+    math::ConjFunctor<Ti> functor(collapsed_input.data<Ti>(),
+                                  collapsed_input.numel(),
+                                  collapsed_input_conj.data<Ti>());
+    for_range(functor);
+    MKL_DFTI_CHECK(DftiComputeBackward(desc.get(),
+                                       collapsed_input_conj.data<void>(),
                                        collapsed_output.data<void>()));
+  } else if (fft_type == FFTTransformType::R2C && !forward) {
+    framework::Tensor collapsed_output_conj(collapsed_output.type());
+    collapsed_output_conj.mutable_data<To>(collapsed_output.dims(),
+                                           ctx.GetPlace());
+    MKL_DFTI_CHECK(DftiComputeForward(desc.get(), collapsed_input.data<void>(),
+                                      collapsed_output_conj.data<void>()));
+    // conjugate the output
+    platform::ForRange<DeviceContext> for_range(ctx, collapsed_output.numel());
+    math::ConjFunctor<To> functor(collapsed_output_conj.data<To>(),
+                                  collapsed_output.numel(),
+                                  collapsed_output.data<To>());
+    for_range(functor);
+  } else {
+    if (forward) {
+      MKL_DFTI_CHECK(DftiComputeForward(desc.get(),
+                                        collapsed_input.data<void>(),
+                                        collapsed_output.data<void>()));
+    } else {
+      MKL_DFTI_CHECK(DftiComputeBackward(desc.get(),
+                                         collapsed_input.data<void>(),
+                                         collapsed_output.data<void>()));
+    }
   }
 
   // resize for the collapsed output
@@ -613,7 +654,7 @@ struct FFTC2RFunctor<platform::CPUDeviceContext, Ti, To> {
       FFTC2CFunctor<platform::CPUDeviceContext, Ti, Ti> c2c_functor;
       c2c_functor(ctx, x, &temp, c2c_dims, normalization, forward);
 
-      const std::vector<int64_t> new_axes(axes.back());
+      const std::vector<int64_t> new_axes{axes.back()};
       exec_fft<platform::CPUDeviceContext, Ti, To>(ctx, &temp, out, new_axes,
                                                    normalization, forward);
     } else {
@@ -653,11 +694,11 @@ struct FFTC2CFunctor<platform::CPUDeviceContext, Ti, To> {
     const auto& input_dim = x->dims();
     const std::vector<size_t> in_sizes =
         framework::vectorize<size_t>(input_dim);
-    std::vector<int64_t> in_strides =
-        framework::vectorize<int64_t>(framework::stride(input_dim));
+    std::vector<std::ptrdiff_t> in_strides =
+        framework::vectorize<std::ptrdiff_t>(framework::stride(input_dim));
     const int64_t data_size = sizeof(C);
     std::transform(in_strides.begin(), in_strides.end(), in_strides.begin(),
-                   [](int64_t s) { return s * data_size; });
+                   [](std::ptrdiff_t s) { return s * data_size; });
 
     const auto* in_data = reinterpret_cast<const C*>(x->data<Ti>());
     auto* out_data = reinterpret_cast<C*>(out->data<To>());
@@ -686,24 +727,24 @@ struct FFTR2CFunctor<platform::CPUDeviceContext, Ti, To> {
     const auto& input_dim = x->dims();
     const std::vector<size_t> in_sizes =
         framework::vectorize<size_t>(input_dim);
-    std::vector<int64_t> in_strides =
-        framework::vectorize<int64_t>(framework::stride(input_dim));
+    std::vector<std::ptrdiff_t> in_strides =
+        framework::vectorize<std::ptrdiff_t>(framework::stride(input_dim));
     {
       const int64_t data_size = sizeof(R);
       std::transform(in_strides.begin(), in_strides.end(), in_strides.begin(),
-                     [](int64_t s) { return s * data_size; });
+                     [](std::ptrdiff_t s) { return s * data_size; });
     }
 
     const auto& output_dim = out->dims();
     const std::vector<size_t> out_sizes =
         framework::vectorize<size_t>(output_dim);
-    std::vector<int64_t> out_strides =
-        framework::vectorize<int64_t>(framework::stride(output_dim));
+    std::vector<std::ptrdiff_t> out_strides =
+        framework::vectorize<std::ptrdiff_t>(framework::stride(output_dim));
     {
       const int64_t data_size = sizeof(C);
       std::transform(out_strides.begin(), out_strides.end(),
                      out_strides.begin(),
-                     [](int64_t s) { return s * data_size; });
+                     [](std::ptrdiff_t s) { return s * data_size; });
     }
 
     const auto* in_data = x->data<R>();
@@ -733,24 +774,24 @@ struct FFTC2RFunctor<platform::CPUDeviceContext, Ti, To> {
     const auto& input_dim = x->dims();
     const std::vector<size_t> in_sizes =
         framework::vectorize<size_t>(input_dim);
-    std::vector<int64_t> in_strides =
-        framework::vectorize<int64_t>(framework::stride(input_dim));
+    std::vector<std::ptrdiff_t> in_strides =
+        framework::vectorize<std::ptrdiff_t>(framework::stride(input_dim));
     {
       const int64_t data_size = sizeof(C);
       std::transform(in_strides.begin(), in_strides.end(), in_strides.begin(),
-                     [](int64_t s) { return s * data_size; });
+                     [](std::ptrdiff_t s) { return s * data_size; });
     }
 
     const auto& output_dim = out->dims();
     const std::vector<size_t> out_sizes =
         framework::vectorize<size_t>(output_dim);
-    std::vector<int64_t> out_strides =
-        framework::vectorize<int64_t>(framework::stride(output_dim));
+    std::vector<std::ptrdiff_t> out_strides =
+        framework::vectorize<std::ptrdiff_t>(framework::stride(output_dim));
     {
       const int64_t data_size = sizeof(R);
       std::transform(out_strides.begin(), out_strides.end(),
                      out_strides.begin(),
-                     [](int64_t s) { return s * data_size; });
+                     [](std::ptrdiff_t s) { return s * data_size; });
     }
 
     const auto* in_data = reinterpret_cast<const C*>(x->data<Ti>());
